@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.Slider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ class MainActivity : ComponentActivity() {
 
                 VerticalSlider(value = position, onValueChange = {
                     position = it
+                    println(it)
                 }, modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .width(24.dp)
@@ -47,6 +49,10 @@ class MainActivity : ComponentActivity() {
                     .height(244.dp)
                     .padding(start = 12.dp)
                 )
+//                Slider(value = position, onValueChange = {
+//                    position = it
+//                    println(it)
+//                })
             }
         }
     }
