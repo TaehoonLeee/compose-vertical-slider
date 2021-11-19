@@ -41,19 +41,19 @@ fun VerticalSlider(
             .sliderSemantics(value, onValueChange, valueRange)
             .focusable(true, interactionSource)
     ) {
-        val maxPy = constraints.maxHeight.toFloat()
-        val minPy = 0f
+        val maxPx = constraints.maxHeight.toFloat()
+        val minPx = 0f
 
         fun scaleToUserValue(offset: Float) =
-            scale(minPy, maxPy, offset, valueRange.start, valueRange.endInclusive)
+            scale(minPx, maxPx, offset, valueRange.start, valueRange.endInclusive)
 
         fun scaleToOffset(userValue: Float) =
-            scale(valueRange.start, valueRange.endInclusive, userValue, minPy, maxPy)
+            scale(valueRange.start, valueRange.endInclusive, userValue, minPx, maxPx)
 
         val rawOffset = remember { mutableStateOf(scaleToOffset(value)) }
-        val draggableState = remember(minPy, maxPy, valueRange) {
+        val draggableState = remember(minPx, maxPx, valueRange) {
             SliderDraggableState {
-                rawOffset.value = (rawOffset.value + it).coerceIn(minPy, maxPy)
+                rawOffset.value = (rawOffset.value + it).coerceIn(minPx, maxPx)
                 onValueChangeState.value.invoke(scaleToUserValue(rawOffset.value))
             }
         }
@@ -63,7 +63,7 @@ fun VerticalSlider(
         }
 
         val press = Modifier.sliderPressModifier(
-            draggableState, interactionSource, maxPy, rawOffset, gestureEndAction
+            draggableState, interactionSource, maxPx, rawOffset, gestureEndAction
         )
 
         val drag = Modifier.draggable(
@@ -75,29 +75,35 @@ fun VerticalSlider(
             reverseDirection = true
         )
 
-        Box(
-            press
-                .then(drag)
-                .widthIn(24.dp)
-                .heightIn(244.dp)
+        val coerced = value.coerceIn(valueRange.start, valueRange.endInclusive)
+        val fraction = calcFraction(valueRange.start, valueRange.endInclusive, coerced)
+        Box(press
+            .then(drag)
+            .widthIn(24.dp)
+            .heightIn(244.dp)
         ) {
             val trackStrokeWidth: Float
             val thumbPx: Float
+            val heightDp: Dp
             with(LocalDensity.current) {
                 trackStrokeWidth = 2.dp.toPx()
                 thumbPx = thumbRadius.toPx()
+                heightDp = maxPx.toDp()
             }
 
             val thumbSize = 24.dp
+            val offset = (heightDp - thumbSize) * fraction
             val center = Modifier.align(Alignment.CenterStart)
 
             Track(
                 modifier = center.fillMaxSize(),
                 thumbPx = thumbPx,
+                positionFractionEnd = fraction,
                 trackStrokeWidth = trackStrokeWidth
             )
             SliderThumb(
                 modifier = center,
+                offset = offset,
                 interactionSource = interactionSource,
                 thumbSize = thumbSize
             )
@@ -109,6 +115,7 @@ fun VerticalSlider(
 fun Track(
     modifier: Modifier,
     thumbPx: Float,
+    positionFractionEnd: Float,
     trackStrokeWidth: Float
 ) {
     val inactiveTrackColor = Color.Black
@@ -126,10 +133,10 @@ fun Track(
         )
 
         val sliderValueEnd = Offset(
-            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y)
+            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y) * positionFractionEnd
         )
         val sliderValueStart = Offset(
-            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y)
+            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y) * 0f
         )
         drawLine(
             activeTrackColor,
@@ -144,10 +151,11 @@ fun Track(
 @Composable
 fun SliderThumb(
     modifier: Modifier,
+    offset: Dp,
     interactionSource: MutableInteractionSource,
     thumbSize: Dp
 ) {
-    Box(modifier) {
+    Box(modifier.padding(bottom = offset)) {
         Spacer(
             Modifier
                 .size(thumbSize, thumbSize)
@@ -185,14 +193,14 @@ private fun Modifier.sliderSemantics(
 private fun Modifier.sliderPressModifier(
     draggableState: DraggableState,
     interactionSource: MutableInteractionSource,
-    maxPy: Float,
+    maxPx: Float,
     rawOffset: State<Float>,
     gestureEndAction: State<(Float) -> Unit>
-): Modifier = pointerInput(draggableState, interactionSource, maxPy) {
+): Modifier = pointerInput(draggableState, interactionSource, maxPx) {
     detectTapGestures(
         onPress = { pos ->
             draggableState.drag(MutatePriority.UserInput) {
-                val to = maxPy - pos.y
+                val to = maxPx - pos.y
                 dragBy(to - rawOffset.value)
             }
             val interaction = PressInteraction.Press(pos)
@@ -211,11 +219,11 @@ private fun Modifier.sliderPressModifier(
     )
 }
 
-private fun calcFraction(minPy: Float, maxPy: Float, offset: Float) =
-    (if (maxPy - minPy == 0f) 0f else (offset - minPy) / (maxPy - minPy)).coerceIn(0f, 1f)
+private fun calcFraction(minPx: Float, maxPx: Float, offset: Float) =
+    (if (maxPx - minPx == 0f) 0f else (offset - minPx) / (maxPx - minPx)).coerceIn(0f, 1f)
 
-private fun scale(minPy: Float, maxPy: Float, rawOffset: Float, start: Float, end: Float) =
-    lerp(start, end, calcFraction(minPy, maxPy, rawOffset))
+private fun scale(minPx: Float, maxPx: Float, rawOffset: Float, start: Float, end: Float) =
+    lerp(start, end, calcFraction(minPx, maxPx, rawOffset))
 
 private class SliderDraggableState(
     val onDelta: (Float) -> Unit
