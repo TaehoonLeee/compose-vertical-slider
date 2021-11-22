@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,31 +35,38 @@ class MainActivity : ComponentActivity() {
                 var position1 by remember { mutableStateOf(0f) }
                 var position2 by remember { mutableStateOf(0f) }
 
-                VerticalSlider(
-                    value = position1,
-                    onValueChange = { position1 = it },
-                    thumbIcon = painterResource(id = R.drawable.zoom_thumb),
-                    inactiveTrackColor = Color.Black,
-                    activeTrackColor = Color.Black,
+                Row(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .width(24.dp)
-                        .height(244.dp)
                         .padding(end = 12.dp)
-                )
+                ) {
+                    Text(text = "Value : $position1")
+                    VerticalSlider(
+                        value = position1,
+                        valueRange = 0f..100f,
+                        onValueChange = { position1 = it },
+                        thumbIcon = painterResource(id = R.drawable.zoom_thumb),
+                        inactiveTrackColor = Color.Black,
+                        activeTrackColor = Color.Black,
+                        modifier = Modifier.width(24.dp).height(244.dp)
+                    )
+                }
 
-                VerticalSlider(
-                    value = position2,
-                    onValueChange = { position2 = it },
-                    thumbIcon = painterResource(id = R.drawable.exposure),
-                    inactiveTrackColor = Color.Black,
-                    activeTrackColor = Color.Black,
+                Column(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
-                        .width(24.dp)
-                        .height(244.dp)
                         .padding(start = 12.dp)
-                )
+                ) {
+                    VerticalSlider(
+                        value = position2,
+                        onValueChange = { position2 = it },
+                        thumbIcon = painterResource(id = R.drawable.exposure),
+                        inactiveTrackColor = Color.Black,
+                        activeTrackColor = Color.Black,
+                        modifier = Modifier.width(24.dp).height(244.dp)
+                    )
+                    Text(text = "Value : $position2")
+                }
             }
         }
     }
