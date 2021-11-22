@@ -5,15 +5,13 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
@@ -30,6 +28,9 @@ fun VerticalSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     onValueChangeFinished: ((Float) -> Unit)? = null,
+    thumbIcon: Painter,
+    inactiveTrackColor: Color,
+    activeTrackColor: Color,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
 ) {
@@ -93,19 +94,20 @@ fun VerticalSlider(
 
             val thumbSize = 24.dp
             val offset = (heightDp - thumbSize) * fraction
-            val center = Modifier.align(Alignment.CenterStart)
+            val center = Modifier.align(Alignment.BottomCenter)
 
             Track(
                 modifier = center.fillMaxSize(),
                 thumbPx = thumbPx,
                 positionFractionEnd = fraction,
-                trackStrokeWidth = trackStrokeWidth
+                trackStrokeWidth = trackStrokeWidth,
+                inactiveTrackColor = inactiveTrackColor,
+                activeTrackColor = activeTrackColor
             )
             SliderThumb(
                 modifier = center,
                 offset = offset,
-                interactionSource = interactionSource,
-                thumbSize = thumbSize
+                icon = thumbIcon
             )
         }
     }
@@ -116,35 +118,45 @@ fun Track(
     modifier: Modifier,
     thumbPx: Float,
     positionFractionEnd: Float,
-    trackStrokeWidth: Float
+    trackStrokeWidth: Float,
+    inactiveTrackColor: Color,
+    activeTrackColor: Color
 ) {
-    val inactiveTrackColor = Color.Black
-    val activeTrackColor = Color.Black
-
     Canvas(modifier) {
-        val sliderBottom = Offset(center.x, thumbPx)
-        val sliderTop = Offset(center.x, size.height - thumbPx)
-        drawLine(
-            inactiveTrackColor,
-            sliderBottom,
-            sliderTop,
-            trackStrokeWidth,
-            StrokeCap.Round
-        )
+        val sliderTop = Offset(center.x, thumbPx)
+        val sliderBottom = Offset(center.x, size.height - thumbPx)
 
-        val sliderValueEnd = Offset(
-            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y) * positionFractionEnd
+        val sliderTopStart = Offset(
+            center.x, sliderTop.y - thumbPx
         )
-        val sliderValueStart = Offset(
-            center.x, sliderBottom.y + (sliderTop.y - sliderBottom.y) * 0f
+        val sliderTopEnd = Offset(
+            center.x, (sliderBottom.y - (sliderBottom.y - sliderTop.y) * positionFractionEnd) - thumbPx
         )
-        drawLine(
-            activeTrackColor,
-            sliderValueStart,
-            sliderValueEnd,
-            trackStrokeWidth,
-            StrokeCap.Round
+        if (sliderTopStart != sliderTopEnd) {
+            drawLine(
+                activeTrackColor,
+                sliderTopStart,
+                sliderTopEnd,
+                trackStrokeWidth,
+                StrokeCap.Round
+            )
+        }
+
+        val sliderBottomEnd = Offset(
+            center.x, (sliderBottom.y + (sliderTop.y - sliderBottom.y) * positionFractionEnd) + thumbPx
         )
+        val sliderBottomStart = Offset(
+            center.x, sliderBottom.y + thumbPx
+        )
+        if (sliderBottomStart.y != sliderBottomEnd.y) {
+            drawLine(
+                inactiveTrackColor,
+                sliderBottomStart,
+                sliderBottomEnd,
+                trackStrokeWidth,
+                StrokeCap.Round
+            )
+        }
     }
 }
 
@@ -152,22 +164,10 @@ fun Track(
 fun SliderThumb(
     modifier: Modifier,
     offset: Dp,
-    interactionSource: MutableInteractionSource,
-    thumbSize: Dp
+    icon: Painter
 ) {
     Box(modifier.padding(bottom = offset)) {
-        Spacer(
-            Modifier
-                .size(thumbSize, thumbSize)
-                .indication(
-                    interactionSource = interactionSource,
-                    indication = rememberRipple(bounded = false, radius = 10.dp)
-                )
-                .hoverable(interactionSource = interactionSource)
-                .shadow(0.dp, CircleShape, clip = false)
-                .background(Color.Blue, CircleShape)
-        )
-//        Image(painter = painterResource(id = R.drawable.zoom_thumb), contentDescription = null)
+        Image(painter = icon, contentDescription = null)
     }
 }
 
