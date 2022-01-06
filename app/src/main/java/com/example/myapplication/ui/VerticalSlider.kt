@@ -1,5 +1,7 @@
 package com.example.myapplication.ui
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -11,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -19,15 +22,13 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import kotlinx.coroutines.coroutineScope
-import java.util.concurrent.CancellationException
+import kotlinx.coroutines.*
 
 @Composable
 fun VerticalSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    onValueChangeFinished: ((Float) -> Unit)? = null,
     thumbIcon: Painter,
     inactiveTrackColor: Color,
     activeTrackColor: Color,
@@ -36,8 +37,19 @@ fun VerticalSlider(
 ) {
     val thumbRadius = 12.dp
     val onValueChangeState = rememberUpdatedState(newValue = onValueChange)
+
+    var visibleState by remember { mutableStateOf(true) }
+    val transition = updateTransition(
+        targetState = visibleState,
+        label = "sliderVisibility"
+    )
+    val alpha by transition.animateFloat(label = "") {
+        if (it) 1f else 0f
+    }
+
     BoxWithConstraints(
         modifier
+            .graphicsLayer(alpha = alpha)
             .requiredSizeIn(thumbRadius * 2, thumbRadius * 2)
             .sliderSemantics(value, onValueChange, valueRange)
             .focusable(true, interactionSource)
@@ -55,22 +67,36 @@ fun VerticalSlider(
         val draggableState = remember(minPx, maxPx, valueRange) {
             SliderDraggableState {
                 rawOffset.value = (rawOffset.value + it).coerceIn(minPx, maxPx)
-                onValueChangeState.value.invoke(scaleToUserValue(rawOffset.value))
+                if (visibleState) onValueChangeState.value.invoke(scaleToUserValue(rawOffset.value))
             }
         }
 
-        val gestureEndAction = rememberUpdatedState<(Float) -> Unit> { velocity: Float ->
-            onValueChangeFinished?.invoke(velocity)
+        LaunchedEffect(Unit) {
+            delay(2000L)
+            if (!draggableState.isDragging) visibleState = false
+        }
+
+        val scope = rememberCoroutineScope()
+        var alphaJob: Job? by remember { mutableStateOf(null) }
+        val gestureEndAction = rememberUpdatedState<suspend () -> Unit> {
+            alphaJob?.cancelAndJoin()
+            alphaJob = scope.launch {
+                delay(2000L)
+                if (!draggableState.isDragging) visibleState = false
+                alphaJob = null
+            }
         }
 
         val press = Modifier.sliderPressModifier(
             draggableState, interactionSource, maxPx, rawOffset, gestureEndAction
-        )
+        ) {
+            if (!visibleState) visibleState = true
+        }
 
         val drag = Modifier.draggable(
             orientation = Orientation.Vertical,
             interactionSource = interactionSource,
-            onDragStopped = { velocity -> gestureEndAction.value.invoke(velocity) },
+            onDragStopped = { gestureEndAction.value.invoke() },
             startDragImmediately = draggableState.isDragging,
             state = draggableState,
             reverseDirection = true
@@ -78,10 +104,11 @@ fun VerticalSlider(
 
         val coerced = value.coerceIn(valueRange.start, valueRange.endInclusive)
         val fraction = calcFraction(valueRange.start, valueRange.endInclusive, coerced)
-        Box(press
-            .then(drag)
-            .widthIn(24.dp)
-            .heightIn(244.dp)
+        Box(
+            press
+                .then(drag)
+                .widthIn(24.dp)
+                .heightIn(244.dp)
         ) {
             val trackStrokeWidth: Float
             val thumbPx: Float
@@ -191,11 +218,12 @@ private fun Modifier.sliderSemantics(
 }
 
 private fun Modifier.sliderPressModifier(
-    draggableState: DraggableState,
+    draggableState: SliderDraggableState,
     interactionSource: MutableInteractionSource,
     maxPx: Float,
     rawOffset: State<Float>,
-    gestureEndAction: State<(Float) -> Unit>
+    gestureEndAction: State<suspend () -> Unit>,
+    onTap: ((Offset) -> Unit)?
 ): Modifier = pointerInput(draggableState, interactionSource, maxPx) {
     detectTapGestures(
         onPress = { pos ->
@@ -207,7 +235,7 @@ private fun Modifier.sliderPressModifier(
             interactionSource.emit(interaction)
             val finishInteraction = try {
                 val success = tryAwaitRelease()
-                gestureEndAction.value.invoke(0f)
+                if (!draggableState.isDragging) gestureEndAction.value.invoke()
                 if (success) PressInteraction.Release(interaction)
                 else PressInteraction.Cancel(interaction)
             } catch (e: CancellationException) {
@@ -215,7 +243,8 @@ private fun Modifier.sliderPressModifier(
             }
 
             interactionSource.emit(finishInteraction)
-        }
+        },
+        onTap = onTap
     )
 }
 
