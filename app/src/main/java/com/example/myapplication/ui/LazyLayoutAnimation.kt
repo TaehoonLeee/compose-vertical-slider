@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.ListUpdateCallback
 import com.example.myapplication.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.util.Stack
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -279,6 +280,7 @@ class ListActionState(
 			visibleItems.getOrNull(it - visibleItems.first().index)
 		}
 
+	private val standingElementsStack: Stack<LazyListItemInfo> = Stack()
 	private val standingElements: MutableMap<LazyListItemInfo, Animatable<Float, AnimationVector1D>> = mutableMapOf()
 	private var firstScrollDirection: ScrollDirection? = null
 
@@ -338,12 +340,21 @@ class ListActionState(
 				}?.also { item ->
 					val currentScrollDirection = getScrollDirection(hovered.index, item.index)
 					firstScrollDirection?.let { firstDirection ->
-						if (firstDirection == currentScrollDirection) moveStandingElement(hovered, item)
+						if (firstDirection == currentScrollDirection) {
+							standingElementsStack.push(item)
+							moveStandingElement(hovered, item)
+						}
 						else {
-							returnStandingElement(hovered)
+							if (standingElementsStack.empty()) {
+								moveStandingElement(hovered, item)
+							} else {
+								standingElementsStack.pop()
+								returnStandingElement(hovered)
+							}
 						}
 					}?: run {
 						firstScrollDirection = currentScrollDirection
+						standingElementsStack.push(item)
 						moveStandingElement(hovered, item)
 					}
 					currentIndexOfDraggedItem = item.index
