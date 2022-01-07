@@ -33,17 +33,7 @@ import kotlinx.coroutines.flow.collect
 
 val Context.dataStore by preferencesDataStore("test")
 
-val testList = listOf(
-	ListAnimationTest("Test1", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "1"),
-	ListAnimationTest("Test2", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "2"),
-	ListAnimationTest("Test3", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "3"),
-	ListAnimationTest("Test4", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "4"),
-	ListAnimationTest("Test5", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "5")
-)
-
 class MainActivity : ComponentActivity() {
-
-	private val viewModel: LazyListViewModel by viewModels()
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -58,23 +48,7 @@ class MainActivity : ComponentActivity() {
 		}
 
 		setContent {
-			val list by viewModel.animations.collectAsState()
 
-			Box(modifier = Modifier
-				.fillMaxSize()
-				.background(Color.Black)
-			) {
-				DragDropLazyColumn(
-					list = list,
-					onPlaced = viewModel::moveList,
-					key = { it.key },
-					onSwipeAction = { idx, item ->
-						viewModel.removeElement(idx)
-					}
-				) { idx, animatedItem, listActionState ->
-					TestLayout(idx = idx, item = animatedItem, dragDropState = listActionState)
-				}
-			}
 		}
 	}
 }
