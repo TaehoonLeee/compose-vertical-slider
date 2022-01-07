@@ -282,7 +282,7 @@ class ListActionState(
 
 	private val standingElementsStack: Stack<LazyListItemInfo> = Stack()
 	private val standingElements: MutableMap<LazyListItemInfo, Animatable<Float, AnimationVector1D>> = mutableMapOf()
-	private var firstScrollDirection: ScrollDirection? = null
+	private var scrollDirection: ScrollDirection? = null
 
 	var initiallyDraggedElement: LazyListItemInfo? by mutableStateOf(null)
 		private set
@@ -310,13 +310,14 @@ class ListActionState(
 		val initiallyElement = requireNotNull(initiallyDraggedElement)
 		val currentElement = requireNotNull(currentElement)
 		val movedDistance = (currentElement.index - initiallyElement.index) * initiallyElement.size
+
 		elementDisplacement.animateTo(movedDistance.toFloat(), tween(500))
 		onPlaced(initiallyElement.index, currentElement.index)
 		initiallyDraggedElement = null
 		currentIndexOfDraggedItem = null
 		standingElements.clear()
 		draggedDistance = 0f
-		firstScrollDirection = null
+		scrollDirection = null
 	}
 
 	suspend fun onDrag(dragAmount: Float) {
@@ -339,22 +340,20 @@ class ListActionState(
 					}
 				}?.also { item ->
 					val currentScrollDirection = getScrollDirection(hovered.index, item.index)
-					firstScrollDirection?.let { firstDirection ->
-						if (firstDirection == currentScrollDirection) {
-							standingElementsStack.push(item)
+					scrollDirection?.let { mainScrollDirection ->
+						if (mainScrollDirection == currentScrollDirection) {
 							moveStandingElement(hovered, item)
 						}
 						else {
 							if (standingElementsStack.empty()) {
+								scrollDirection = currentScrollDirection
 								moveStandingElement(hovered, item)
 							} else {
-								standingElementsStack.pop()
 								returnStandingElement(hovered)
 							}
 						}
 					}?: run {
-						firstScrollDirection = currentScrollDirection
-						standingElementsStack.push(item)
+						scrollDirection = currentScrollDirection
 						moveStandingElement(hovered, item)
 					}
 					currentIndexOfDraggedItem = item.index
@@ -364,6 +363,7 @@ class ListActionState(
 	}
 
 	private fun moveStandingElement(from: LazyListItemInfo, to: LazyListItemInfo) {
+		standingElementsStack.push(to)
 		val targetDistance = to.size * (from.index - to.index)
 
 		standingElements[to]?.let {
@@ -379,6 +379,7 @@ class ListActionState(
 
 	private fun returnStandingElement(hovered: LazyListItemInfo) {
 		standingElements[hovered]?.let {
+			standingElementsStack.pop()
 			actionScope.launch {
 				it.animateTo(0f, tween(500))
 			}
