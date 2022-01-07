@@ -1,6 +1,6 @@
 package com.example.myapplication.ui
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,7 +14,6 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.consumePositionChange
@@ -42,7 +41,7 @@ data class ListAnimationTest(
 fun TestLayout(
 	idx: Int,
 	item: ListAnimationTest,
-	listActionState: ListActionState
+	dragDropState: DragDropState
 ) {
 	val scrollScope = rememberCoroutineScope()
 
@@ -58,23 +57,23 @@ fun TestLayout(
 			contentDescription = null,
 			modifier = Modifier
 				.size(24.dp)
-				.pointerInput(Unit) {
+				.pointerInput(idx) {
 					detectVerticalDragGestures(
 						onVerticalDrag = { change, dragAmount ->
 							change.consumeAllChanges()
 							scrollScope.launch {
-								listActionState.onDrag(dragAmount)
+								dragDropState.onDrag(dragAmount)
 							}
 						},
-						onDragStart = { listActionState.onDragStart(idx, it) },
+						onDragStart = { dragDropState.onDragStart(idx) },
 						onDragEnd = {
 							scrollScope.launch {
-								listActionState.onDragInterrupted()
+								dragDropState.onDragInterrupted()
 							}
 						},
 						onDragCancel = {
 							scrollScope.launch {
-								listActionState.onDragInterrupted()
+								dragDropState.onDragInterrupted()
 							}
 						}
 					)
@@ -95,29 +94,35 @@ fun TestLayout(
 }
 
 @Composable
-fun <T> ActionLazyColumn(
+fun <T> DragDropLazyColumn(
 	list: List<T>,
 	key: ((T) -> Any)? = null,
+	onSwipeAction: (Int, T) -> Unit,
 	onPlaced: (from: Int, to: Int) -> Unit,
-	content: @Composable (Int, T, ListActionState) -> Unit
+	content: @Composable (Int, T, DragDropState) -> Unit
 ) {
-	val listActionState by rememberListActionState(onPlaced = onPlaced)
+	val dragDropListState by rememberDragDropListState(onPlaced = onPlaced)
+	val listDiffState by rememberListDiffState(list = list)
+	listDiffState.calculateDiff(list)
 
-	LazyColumn(state = listActionState.lazyListState) {
+	LazyColumn(state = dragDropListState.lazyListState) {
 		items(
-			list.size,
-			key = if (key != null) { keyIdx -> key(list[keyIdx]) } else null
+			listDiffState.oldList.size,
+			key = if (key != null) { keyIdx -> key(listDiffState.oldList[keyIdx].item) } else null
 		) { idx ->
-			val item = list[idx]
-			val offsetOrNull = listActionState.elementOffset.roundToInt().takeIf {
-				idx == listActionState.initiallyDraggedElement?.index
+			val animatedItem = listDiffState.oldList[idx]
+			val offsetOrNull = dragDropListState.elementOffset.roundToInt().takeIf {
+				idx == dragDropListState.initiallyDraggedElement?.index
 			}
 
-			key(key?.invoke(item)) {
-				AnimatedContent(
-					offset = listActionState.getStandingElementOffset(idx)?: offsetOrNull?: 0
-				) {
-					content(idx, item, listActionState)
+			key(key?.invoke(animatedItem.item)) {
+				AnimatedVisibility(visibleState = animatedItem.visibility) {
+					AnimatedContent(
+						offset = dragDropListState.getStandingElementOffset(idx) ?: offsetOrNull ?: 0,
+						onSwipeAction = { onSwipeAction(idx, animatedItem.item) }
+					) {
+						content(idx, animatedItem.item, dragDropListState)
+					}
 				}
 			}
 		}
@@ -127,12 +132,13 @@ fun <T> ActionLazyColumn(
 @Composable
 fun AnimatedContent(
 	offset: Int,
+	onSwipeAction: () -> Unit,
 	content: @Composable () -> Unit
 ) {
 	Column(Modifier
 		.offset { IntOffset(0, offset) }
 	) {
-		SwipeableRow(onSwipeAction = {}) {
+		SwipeableRow(onSwipeAction = onSwipeAction) {
 			content()
 		}
 	}
@@ -180,18 +186,35 @@ fun SwipeableRow(
 	)
 }
 
+data class AnimatedItem<T>(
+	val item: T,
+	val visibility: MutableTransitionState<Boolean> = MutableTransitionState(true)
+) {
+	override fun hashCode(): Int = item.hashCode()
+
+	override fun equals(other: Any?): Boolean {
+		if (this === other) return true
+		if (javaClass != other?.javaClass) return false
+		if (item != (other as AnimatedItem<*>).item) return false
+
+		return true
+	}
+}
+
 @Composable
-fun <T> updateAnimatedItemsState(
-	newList: List<T>,
-	isFirst: Boolean,
-	setIsFirst: (Boolean) -> Unit
-): SnapshotStateList<AnimatedItem<T>> {
-	val removeItemScope = rememberCoroutineScope()
-	val oldList = remember { mutableStateListOf<AnimatedItem<T>>() }
+fun <T> rememberListDiffState(
+	list: List<T>,
+	diffScope: CoroutineScope = rememberCoroutineScope()
+) = remember { mutableStateOf(ListDiffState(
+	diffScope,
+	list.map { AnimatedItem(it) }.toMutableStateList())
+) }
 
-	LaunchedEffect(newList) {
-		if (oldList == newList) return@LaunchedEffect
-
+class ListDiffState<T>(
+	val diffScope: CoroutineScope,
+	val oldList: SnapshotStateList<AnimatedItem<T>>
+) {
+	fun calculateDiff(newList: List<T>) {
 		val diffCallback =
 			object : DiffUtil.Callback() {
 				override fun getOldListSize(): Int = oldList.size
@@ -209,52 +232,37 @@ fun <T> updateAnimatedItemsState(
 			override fun onInserted(position: Int, count: Int) {
 				for (i in 0 until count) {
 					val newPosition = position + i
-					val newItem = AnimatedItem(newList[newPosition], MutableTransitionState(isFirst))
+					val newItem = AnimatedItem(newList[newPosition], MutableTransitionState(false))
 					newItem.visibility.targetState = true
 					oldList.add(newPosition, newItem)
 				}
-				setIsFirst(false)
 			}
 
 			override fun onRemoved(position: Int, count: Int) {
 				oldList[position].visibility.targetState = false
-				removeItemScope.launch {
+				diffScope.launch {
 					Animatable(1f).animateTo(0f)
 					oldList.removeAt(position)
 				}
 			}
 
-			override fun onMoved(fromPosition: Int, toPosition: Int) = Unit
+			override fun onMoved(fromPosition: Int, toPosition: Int) {
+				oldList.add(toPosition, oldList.removeAt(fromPosition))
+			}
+
 			override fun onChanged(position: Int, count: Int, payload: Any?) = Unit
 		})
-	}
-
-	return oldList
-}
-
-data class AnimatedItem<T>(
-	val item: T,
-	val visibility: MutableTransitionState<Boolean> = MutableTransitionState(false)
-) {
-	override fun hashCode(): Int = item.hashCode()
-
-	override fun equals(other: Any?): Boolean {
-		if (this === other) return true
-		if (javaClass != other?.javaClass) return false
-		if (item != (other as AnimatedItem<*>).item) return false
-
-		return true
 	}
 }
 
 @Composable
-fun rememberListActionState(
+fun rememberDragDropListState(
 	onPlaced: (from: Int, to: Int) -> Unit,
 	coroutineScope: CoroutineScope = rememberCoroutineScope(),
 	lazyListState: LazyListState = rememberLazyListState()
-) = remember { mutableStateOf(ListActionState(lazyListState, coroutineScope, onPlaced)) }
+) = remember { mutableStateOf(DragDropState(lazyListState, coroutineScope, onPlaced)) }
 
-class ListActionState(
+class DragDropState(
 	val lazyListState: LazyListState,
 	private val actionScope: CoroutineScope,
 	private val onPlaced: (from: Int, to: Int) -> Unit,
@@ -294,16 +302,9 @@ class ListActionState(
 		return standingElements[hoveringElement]?.value?.roundToInt()
 	}
 
-	fun onDragStart(
-		idx: Int,
-		offset: Offset
-	) {
-		lazyListState.layoutInfo.visibleItemsInfo.firstOrNull {
-			(offset.y.toInt() + idx * it.size) in it.offset..(it.offset + it.size)
-		}?.also {
-			currentIndexOfDraggedItem = it.index
-			initiallyDraggedElement = it
-		}
+	fun onDragStart(idx: Int) {
+		initiallyDraggedElement = lazyListState.layoutInfo.visibleItemsInfo[idx]
+		currentIndexOfDraggedItem = initiallyDraggedElement?.index
 	}
 
 	suspend fun onDragInterrupted() {
@@ -361,6 +362,17 @@ class ListActionState(
 			}
 		}
 	}
+
+	fun checkForOverScroll(): Float = initiallyDraggedElement?.let { itemInfo ->
+		val startOffset = itemInfo.offset + draggedDistance
+		val endOffset = itemInfo.offset + itemInfo.size + draggedDistance
+
+		when {
+			draggedDistance > 0 -> (endOffset - lazyListState.layoutInfo.viewportEndOffset).takeIf { it > 0 }
+			draggedDistance < 0 -> (startOffset - lazyListState.layoutInfo.viewportStartOffset).takeIf { it < 0 }
+			else -> null
+		}
+	}?: 0f
 
 	private fun moveStandingElement(from: LazyListItemInfo, to: LazyListItemInfo) {
 		standingElementsStack.push(to)

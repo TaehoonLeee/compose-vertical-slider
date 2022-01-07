@@ -7,26 +7,19 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.ImageDecoder
-import android.graphics.drawable.Drawable
 import android.os.Bundle
-import android.os.HandlerThread
-import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -34,15 +27,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListUpdateCallback
-import com.bumptech.glide.Glide
 import com.example.myapplication.R
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
-import java.util.concurrent.Executors
-import kotlin.system.measureTimeMillis
 
 val Context.dataStore by preferencesDataStore("test")
 
@@ -54,22 +41,9 @@ val testList = listOf(
 	ListAnimationTest("Test5", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "5")
 )
 
-val testList2 = listOf(
-	ListAnimationTest("Test1", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "1"),
-	ListAnimationTest("Test3", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "3"),
-	ListAnimationTest("Test2", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "2"),
-	ListAnimationTest("Test4", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "4"),
-	ListAnimationTest("Test5", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "5")
-)
-
-val testList3 = listOf(
-	ListAnimationTest("Test1", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "1"),
-	ListAnimationTest("Test3", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "3"),
-	ListAnimationTest("Test4", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "4"),
-	ListAnimationTest("Test5", "rtmp://asdkfjasdjfnoasdnfaosdnfoakdfsjdnfo", "5")
-)
-
 class MainActivity : ComponentActivity() {
+
+	private val viewModel: LazyListViewModel by viewModels()
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -84,53 +58,21 @@ class MainActivity : ComponentActivity() {
 		}
 
 		setContent {
-			val list = remember { testList.toMutableStateList() }
-			fun moveList(from: Int, to: Int) {
-				list.add(to, list.removeAt(from))
-			}
-
-			val oldList = testList
-			val newList = testList3
-			val diffCallback =
-				object : DiffUtil.Callback() {
-					override fun getOldListSize(): Int = oldList.size
-
-					override fun getNewListSize(): Int = newList.size
-
-					override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-						oldList[oldItemPosition] == newList[newItemPosition]
-
-					override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-						oldList[oldItemPosition] == newList[newItemPosition]
-				}
-
-			DiffUtil.calculateDiff(diffCallback).dispatchUpdatesTo(object : ListUpdateCallback {
-				override fun onInserted(position: Int, count: Int) {
-					println("On Inserted: $position, $count")
-				}
-
-				override fun onRemoved(position: Int, count: Int) {
-					println("On Removed: $position, $count")
-				}
-
-				override fun onMoved(fromPosition: Int, toPosition: Int) {
-					println("On Moved: $fromPosition, $toPosition")
-				}
-
-				override fun onChanged(position: Int, count: Int, payload: Any?) {
-					println("On Changed: $position, $count, $payload")
-				}
-			})
+			val list by viewModel.animations.collectAsState()
 
 			Box(modifier = Modifier
 				.fillMaxSize()
 				.background(Color.Black)
 			) {
-				ActionLazyColumn(
+				DragDropLazyColumn(
 					list = list,
-					onPlaced = ::moveList
-				) { idx, item, listActionState ->
-					TestLayout(idx = idx, item = item, listActionState = listActionState)
+					onPlaced = viewModel::moveList,
+					key = { it.key },
+					onSwipeAction = { idx, item ->
+						viewModel.removeElement(idx)
+					}
+				) { idx, animatedItem, listActionState ->
+					TestLayout(idx = idx, item = animatedItem, dragDropState = listActionState)
 				}
 			}
 		}
