@@ -2,4 +2,4 @@
 
 Vertical Slider with jetpack compose
 
-![ezgif com-video-to-gif](https://user-images.githubusercontent.com/48707020/142792927-82b5aed3-7a9f-4b36-bdf2-53ccc5df2743.gif)
+![ezgif com-crop](https://user-images.githubusercontent.com/48707020/148551835-acf2e6a2-5157-40ee-a57d-334192c2e9fc.gif)
